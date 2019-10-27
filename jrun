@@ -1,0 +1,44 @@
+#!/system/bin/sh
+
+if [ -z "$1" ]; then
+	echo "jrun <source file with main method> [args]">&2; exit
+elif [ -z "$(command -v ecj)" ] || [ -z "$(command -v dx)" ]; then
+	echo "ecj or dx could not be found.">&2; exit
+fi
+if [ $(basename $(pwd)) == "src" ]; then
+	src=$(pwd)
+else
+	echo "Run this command under a src folder to ensure class hierarchy."
+	src=$(dirname $1)
+fi	
+cmain=${1%.java}; cmain=${cmain//\//.}; shift
+
+temp="$src/tmp$RANDOM"
+
+echo "Compiling java source files";
+sources=""
+for f in $(find $src -name '*.java'); do {
+	echo "$f";
+	sources+="$f " 
+}; done
+if [ -z "$sources" ]; then
+	echo "No java source files found, aborting"; exit
+fi
+ecj -d "$temp" $sources || {
+	echo "Failed to compile source files"; exit
+}
+echo "Compiling complete"
+
+echo "Dexing class files"
+dx --dex --min-sdk-version=24 --output="$cmain.dex" $temp || {
+	echo "Failed to dex class files"; exit
+}
+echo "Dexing complete"
+rm -rf $temp
+
+echo "Running $cmain"
+dalvikvm -cp $cmain.dex $cmain $* || {
+	echo "Failed to run $cmain"; exit
+}
+
+exit
